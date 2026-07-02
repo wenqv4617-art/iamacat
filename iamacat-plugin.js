@@ -19,7 +19,7 @@
     currentChatChar: null, // 正在骚扰的角色
     npcChat: null,         // 临时路人 NPC 会话
     feed: [],              // 探索信息流
-    encounter: null        // 偶遇卡片状态
+    encounter: null        // 偶遇卡片状态 { scenario: '', history: [], loading: false }
   };
 
   // --- 核心方法：状态管理与数据加载 ---
@@ -46,7 +46,7 @@
     }
   }
 
-  // --- 核心方法：样式管理 ---
+  // --- 核心方法：样式管理（重构为浅薄荷绿与柔和粉可爱配色） ---
   function insertStyles() {
     if (document.getElementById('roche-plugin-iamacat-styles')) return;
     const styleEl = document.createElement('style');
@@ -56,8 +56,8 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        background-color: #fafafa;
-        color: #262626;
+        background-color: #f4faf7; /* 浅薄荷绿背景 */
+        color: #3d4a46; /* 暗灰色，比纯黑更温和 */
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         box-sizing: border-box;
         position: relative;
@@ -67,7 +67,7 @@
       }
       .roche-plugin-iamacat .cat-header {
         height: 48px;
-        border-bottom: 1px solid #efefef;
+        border-bottom: 1px solid #e1efe9;
         background-color: #ffffff;
         display: flex;
         align-items: center;
@@ -80,6 +80,18 @@
         font-weight: 600;
         letter-spacing: -0.2px;
       }
+      
+      /* 正在沉思的呼吸灯动画 */
+      @keyframes thinkingPulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+      }
+      .roche-plugin-iamacat .thinking-pulse {
+        animation: thinkingPulse 1.5s infinite ease-in-out;
+        color: #e29295;
+      }
+
       .roche-plugin-iamacat .header-left, 
       .roche-plugin-iamacat .header-right {
         width: 36px;
@@ -94,7 +106,7 @@
         border: none;
         padding: 4px;
         cursor: pointer;
-        color: #262626;
+        color: #3d4a46;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -109,7 +121,7 @@
       }
       .roche-plugin-iamacat .cat-navbar {
         height: 56px;
-        border-top: 1px solid #efefef;
+        border-top: 1px solid #e1efe9;
         background-color: #ffffff;
         display: flex;
         justify-content: space-around;
@@ -122,7 +134,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        color: #8e8e8e;
+        color: #92a8a1;
         font-size: 11px;
         gap: 3px;
         cursor: pointer;
@@ -131,7 +143,7 @@
         flex: 1;
       }
       .roche-plugin-iamacat .nav-item.active {
-        color: #262626;
+        color: #76c3ab; /* 激活态为薄荷绿 */
       }
       .roche-plugin-iamacat .tab-content {
         display: flex;
@@ -141,8 +153,8 @@
       .roche-plugin-iamacat .section-title {
         font-size: 13px;
         font-weight: 600;
-        color: #262626;
-        border-left: 2px solid #262626;
+        color: #3d4a46;
+        border-left: 3px solid #e29295; /* 粉色指示线 */
         padding-left: 8px;
         letter-spacing: 0.5px;
       }
@@ -153,7 +165,7 @@
       }
       .roche-plugin-iamacat .stat-card {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 12px;
         display: flex;
@@ -162,7 +174,7 @@
       }
       .roche-plugin-iamacat .stat-label {
         font-size: 11px;
-        color: #8e8e8e;
+        color: #92a8a1;
       }
       .roche-plugin-iamacat .stat-value {
         font-size: 15px;
@@ -170,18 +182,18 @@
       }
       .roche-plugin-iamacat .stat-bar-bg {
         height: 4px;
-        background-color: #f1f1f1;
+        background-color: #f1f8f5;
         border-radius: 2px;
         overflow: hidden;
       }
       .roche-plugin-iamacat .stat-bar-fill {
         height: 100%;
-        background-color: #262626;
+        background-color: #e29295; /* 进度填充浅粉 */
         transition: width 0.3s ease;
       }
       .roche-plugin-iamacat .profile-form {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 16px;
         display: flex;
@@ -199,8 +211,8 @@
         height: 44px;
         border-radius: 50%;
         overflow: hidden;
-        border: 1px solid #efefef;
-        background-color: #f1f1f1;
+        border: 1px solid #e1efe9;
+        background-color: #f1f8f5;
         flex-shrink: 0;
       }
       .roche-plugin-iamacat .user-avatar-frame img {
@@ -211,7 +223,7 @@
       .roche-plugin-iamacat .user-avatar-placeholder {
         width: 100%;
         height: 100%;
-        background-color: #dbdbdb;
+        background-color: #dbe8e2;
       }
       .roche-plugin-iamacat .form-row {
         display: flex;
@@ -222,24 +234,24 @@
       .roche-plugin-iamacat .form-row label {
         font-size: 11px;
         font-weight: 500;
-        color: #8e8e8e;
+        color: #92a8a1;
       }
       .roche-plugin-iamacat .form-input {
-        border: 1px solid #dbdbdb;
+        border: 1px solid #cce3da;
         border-radius: 6px;
         padding: 8px 10px;
         font-size: 13px;
         outline: none;
-        background-color: #fafafa;
-        color: #262626;
+        background-color: #fafdfc;
+        color: #3d4a46;
         transition: border-color 0.2s;
         width: 100%;
       }
       .roche-plugin-iamacat .form-input:focus {
-        border-color: #262626;
+        border-color: #76c3ab;
       }
       .roche-plugin-iamacat .btn-primary {
-        background-color: #262626;
+        background-color: #e29295; /* 按钮主体粉色 */
         color: #ffffff;
         border: none;
         border-radius: 6px;
@@ -260,7 +272,7 @@
       }
       .roche-plugin-iamacat .char-card {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 12px;
         display: flex;
@@ -270,7 +282,7 @@
         transition: background-color 0.2s;
       }
       .roche-plugin-iamacat .char-card:hover {
-        background-color: #fcfcfc;
+        background-color: #fbfdfc;
       }
       .roche-plugin-iamacat .char-avatar-container {
         width: 36px;
@@ -278,8 +290,8 @@
         border-radius: 50%;
         overflow: hidden;
         flex-shrink: 0;
-        border: 1px solid #efefef;
-        background-color: #f1f1f1;
+        border: 1px solid #e1efe9;
+        background-color: #f1f8f5;
       }
       .roche-plugin-iamacat .char-avatar {
         width: 100%;
@@ -289,7 +301,7 @@
       .roche-plugin-iamacat .char-avatar-placeholder {
         width: 100%;
         height: 100%;
-        background-color: #e1e1e1;
+        background-color: #dbe8e2;
       }
       .roche-plugin-iamacat .char-info {
         flex: 1;
@@ -304,7 +316,7 @@
       }
       .roche-plugin-iamacat .char-last-msg {
         font-size: 11px;
-        color: #8e8e8e;
+        color: #92a8a1;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -316,7 +328,7 @@
       }
       .roche-plugin-iamacat .action-card {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 12px;
         display: flex;
@@ -326,7 +338,7 @@
       }
       .roche-plugin-iamacat .action-card-complex {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 12px;
         display: flex;
@@ -344,12 +356,12 @@
       }
       .roche-plugin-iamacat .action-desc {
         font-size: 11px;
-        color: #8e8e8e;
+        color: #92a8a1;
       }
       .roche-plugin-iamacat .btn-action {
         background-color: transparent;
-        border: 1px solid #262626;
-        color: #262626;
+        border: 1px solid #76c3ab; /* 动作按钮薄荷绿 */
+        color: #76c3ab;
         border-radius: 6px;
         padding: 6px 12px;
         font-size: 11px;
@@ -359,7 +371,7 @@
         white-space: nowrap;
       }
       .roche-plugin-iamacat .btn-action:hover {
-        background-color: #262626;
+        background-color: #76c3ab;
         color: #ffffff;
       }
       .roche-plugin-iamacat .sleep-form {
@@ -374,7 +386,7 @@
       }
       .roche-plugin-iamacat .feed-item {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 8px;
         padding: 12px;
         display: flex;
@@ -388,12 +400,12 @@
       .roche-plugin-iamacat .feed-content {
         font-size: 12px;
         line-height: 1.4;
-        color: #4a4a4a;
+        color: #4a5451;
       }
       .roche-plugin-iamacat .loading-placeholder,
       .roche-plugin-iamacat .empty-placeholder {
         font-size: 11px;
-        color: #8e8e8e;
+        color: #92a8a1;
         text-align: center;
         padding: 24px 12px;
       }
@@ -429,24 +441,25 @@
         line-height: 1.4;
       }
       .roche-plugin-iamacat .chat-bubble-row.me .chat-bubble {
-        background-color: #262626;
-        color: #ffffff;
+        background-color: #fbe9eb; /* 猫咪发言用淡粉气泡 */
+        color: #3d4a46;
+        border: 1px solid #f3dbde;
         border-bottom-right-radius: 4px;
       }
       .roche-plugin-iamacat .chat-bubble-row.them .chat-bubble {
         background-color: #ffffff;
-        color: #262626;
-        border: 1px solid #efefef;
+        color: #3d4a46;
+        border: 1px solid #e1efe9; /* 对方用白色带薄荷绿描边 */
         border-bottom-left-radius: 4px;
       }
       .roche-plugin-iamacat .chat-bubble-row.typing .chat-bubble {
-        color: #8e8e8e;
+        color: #92a8a1;
         font-style: italic;
       }
       .roche-plugin-iamacat .chat-input-bar {
         display: flex;
         gap: 8px;
-        border-top: 1px solid #efefef;
+        border-top: 1px solid #e1efe9;
         padding: 12px;
         flex-shrink: 0;
         background-color: #ffffff;
@@ -455,11 +468,11 @@
         flex: 1;
       }
       
-      /* 偶遇路人卡片遮罩层 */
+      /* 偶遇遮罩层与卡片 */
       .roche-plugin-iamacat .modal-overlay {
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background-color: rgba(0, 0, 0, 0.4);
+        background-color: rgba(61, 74, 70, 0.4);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -468,45 +481,68 @@
       }
       .roche-plugin-iamacat .encounter-card {
         background-color: #ffffff;
-        border: 1px solid #efefef;
+        border: 1px solid #e1efe9;
         border-radius: 12px;
         padding: 20px;
         width: 100%;
         max-width: 320px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        gap: 12px;
+        box-shadow: 0 4px 12px rgba(118, 195, 171, 0.15);
       }
       .roche-plugin-iamacat .encounter-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid #f1f1f1;
+        border-bottom: 1px solid #f1f8f5;
         padding-bottom: 8px;
       }
       .roche-plugin-iamacat .encounter-title-text {
         font-size: 14px;
         font-weight: 600;
+        color: #3d4a46;
         letter-spacing: 0.5px;
       }
-      .roche-plugin-iamacat .encounter-scenario {
-        font-size: 13px;
-        font-weight: 600;
-        line-height: 1.5;
-        padding: 10px;
-        background-color: #fafafa;
+      
+      /* 偶遇多轮历史流微型列表 */
+      .roche-plugin-iamacat .encounter-history-list {
+        max-height: 180px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        border: 1px solid #e1efe9;
+        padding: 8px;
         border-radius: 6px;
-        border-left: 3px solid #262626;
+        background: #fbfdfc;
       }
-      .roche-plugin-iamacat .encounter-reaction {
-        font-size: 13px;
+      .roche-plugin-iamacat .history-item {
+        font-size: 11.5px;
         line-height: 1.4;
-        color: #4a4a4a;
-        padding: 10px;
-        background-color: #f6f6f6;
-        border-radius: 6px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        max-width: 85%;
       }
+      .roche-plugin-iamacat .history-item.scenario-start {
+        background: #f1f8f5;
+        color: #648c7f;
+        font-weight: 500;
+        max-width: 100%;
+      }
+      .roche-plugin-iamacat .history-item.user-act {
+        background: #fbe9eb;
+        color: #b06567;
+        align-self: flex-end;
+        text-align: right;
+      }
+      .roche-plugin-iamacat .history-item.npc-react {
+        background: #ffffff;
+        color: #4a5451;
+        align-self: flex-start;
+        border: 1px solid #e1efe9;
+      }
+      
       .roche-plugin-iamacat .encounter-form {
         display: flex;
         flex-direction: column;
@@ -919,7 +955,6 @@
       }
     };
     
-    // 绑定偶遇按钮
     bodyEl.querySelector('#action-npc-btn').onclick = () => {
       triggerNPCOncounter();
     };
@@ -1066,7 +1101,7 @@
     }
   }
 
-  // --- 核心方法：卡片式偶遇路人行为渲染 ---
+  // --- 核心方法：多轮卡片式偶遇路人行为渲染 ---
   function renderEncounterModal() {
     let wrapper = containerEl.querySelector('#encounter-modal-wrapper');
     if (!wrapper) {
@@ -1090,45 +1125,49 @@
             </button>
           </div>
           
+          <!-- 显示路人场景和历史互动记录流 -->
+          <div class="encounter-history-list" id="encounter-history-scroll">
+            <div class="history-item scenario-start">路人：${state.encounter.scenario}</div>
+            ${state.encounter.history.map(h => `
+              <div class="history-item ${h.role === 'user' ? 'user-act' : 'npc-react'}">
+                <span class="role-lbl">${h.role === 'user' ? '咪' : '路人'}：</span>
+                <span class="text-val">${h.text}</span>
+              </div>
+            `).join('')}
+          </div>
+          
           ${state.encounter.loading ? `
             <div class="loading-placeholder">正在发生一些有趣的事情...</div>
           ` : `
-            <div class="encounter-scenario">
-              ${state.encounter.scenario}
-            </div>
-            
-            ${state.encounter.reaction ? `
-              <div class="encounter-reaction">
-                ${state.encounter.reaction}
+            <form class="encounter-form" id="encounter-action-form">
+              <div class="form-row">
+                <input type="text" id="encounter-action-input" class="form-input" placeholder="写下猫咪要做的下一步捣蛋..." required autocomplete="off" />
               </div>
-              <button class="btn-primary" id="leave-encounter-btn">悄然离开</button>
-            ` : `
-              <form class="encounter-form" id="encounter-action-form">
-                <div class="form-row">
-                  <label>你的行动：</label>
-                  <input type="text" id="encounter-action-input" class="form-input" placeholder="写下猫咪要做的事，例如：悄悄蹭他裤腿..." required autocomplete="off" />
-                </div>
-                <button type="submit" class="btn-primary" style="margin-top: 4px;">行动！</button>
-              </form>
-            `}
+              <button type="submit" class="btn-primary" style="margin-top: 4px;">行动！</button>
+            </form>
+            <button class="btn-action" id="leave-encounter-btn" style="width: 100%;">悄然离开</button>
           `}
         </div>
       </div>
     `;
     
-    // 绑定关闭按钮
+    // 自动滚动到底部以便看最新互动
+    const histScroll = wrapper.querySelector('#encounter-history-scroll');
+    if (histScroll) histScroll.scrollTop = histScroll.scrollHeight;
+
+    // 绑定右上角与底部离开按钮
     wrapper.querySelector('#close-encounter-btn').onclick = () => {
       state.encounter = null;
       renderEncounterModal();
     };
     
-    if (state.encounter.reaction) {
+    if (!state.encounter.loading) {
       wrapper.querySelector('#leave-encounter-btn').onclick = () => {
         state.encounter = null;
         renderEncounterModal();
         render();
       };
-    } else if (!state.encounter.loading) {
+
       const form = wrapper.querySelector('#encounter-action-form');
       form.onsubmit = async (e) => {
         e.preventDefault();
@@ -1141,8 +1180,9 @@
           return;
         }
         
+        // 追加本轮行动记录
+        state.encounter.history.push({ role: 'user', text: actionText });
         state.encounter.loading = true;
-        state.encounter.action = actionText;
         renderEncounterModal();
         
         // 扣除资源并更新状态
@@ -1151,32 +1191,34 @@
         state.profile.mischief += 1;
         saveProfile();
         
+        // 编译偶遇上下文（提供前几轮的历史行动，让 AI 能够多轮连续对话回应）
+        const historyContext = state.encounter.history.map(h => 
+          `${h.role === 'user' ? '猫咪(我)行动' : '路人反应'}: ${h.text}`
+        ).join('\n');
+
         const reactionPrompt = `你是一只猫。
 当前场景是：[${state.encounter.scenario}]。
-你作为一只可爱的猫咪，对身边的人采取了如下行动：[${actionText}]。
+我们目前正在进行这一场景下连续的行为互动，以下是截至目前的历史互动经过：
+${historyContext}
 
-这只猫咪的信息：
-- 花色：${state.profile.color}
-- 特长：${state.profile.specialty}
-
-请生成这个路人接下来的反应。
+请生成这个人针对你最新的行动 [${actionText}] 产生的即时情绪反应与具体表现。
 规则：
-1. 他的态度可以是偏友好的（觉得被治愈了，或者轻轻拍拍你），也可以是有些困扰或防备的（比如吓了一跳，嘟囔几句并小心避开）。
-2. 【绝对禁止出现任何对猫咪的暴力、伤害、踢踹、或者残虐残忍的行为设定】。
-3. 反应描述必须真实生动符合日常，字数严格限制在 60 字以内。
-4. 千万不要带有任何 emoji 图标。
-请直接输出此人的具体反应，不要带任何 Markdown 或额外格式。`;
+1. 他的态度可以偏友好（觉得治愈、轻轻抚摸），也可以偏困扰或防备（吓了一跳、抱怨并退后），但【绝对禁止出现任何对猫咪的暴力、伤害、踢踹或残虐残酷行为设定】。
+2. 反应描述必须真实生动符合日常，字数严格限制在 50 字以内。
+3. 千万不要带有任何 emoji 图标。
+4. 请直接输出此人最新的反应言行，不要带有任何 Markdown 标记或多余前缀。`;
         
         try {
           const res = await rocheApi.ai.chat({
             messages: [{ role: 'user', content: reactionPrompt }]
           });
           state.encounter.loading = false;
-          state.encounter.reaction = res.text || "路人有些诧异地看了你一眼，随后快步离开了。";
+          const reactionText = res.text || "路人叹了口气，避开了你。";
+          state.encounter.history.push({ role: 'assistant', text: reactionText });
           renderEncounterModal();
         } catch (err) {
           state.encounter.loading = false;
-          state.encounter.reaction = "发生了一点小意外，路人转身走开了。";
+          state.encounter.history.push({ role: 'assistant', text: "路人急匆匆地离开了。" });
           renderEncounterModal();
         }
       };
@@ -1189,8 +1231,7 @@
     
     state.encounter = {
       scenario: "一个行人急匆匆地走过街角。",
-      action: "",
-      reaction: "",
+      history: [],
       loading: true
     };
     renderEncounterModal();
@@ -1277,6 +1318,13 @@
       input.value = '';
       renderChatSubpage(bodyEl, headerBack, isNpc);
 
+      // --- 沉思常驻提示优化 ---
+      const headerTitle = containerEl.querySelector('#header-title-text');
+      if (headerTitle) {
+        headerTitle.innerText = "对方正在沉思...";
+        headerTitle.classList.add('thinking-pulse'); // 开启柔和呼吸灯样式
+      }
+
       try {
         let worldbookText = '';
         try {
@@ -1299,7 +1347,7 @@
         const systemPrompt = `你现在扮演 Roche 居民：${state.currentChatChar.name}（性格设定：${state.currentChatChar.persona || state.currentChatChar.bio || ''}）。
 【剧情核心设定】：
 你平日里所熟识的朋友 “${userPersonaName}”，由于某种莫名而离奇的魔法或意外，【现在已经彻底变成了一只猫咪】！
-现在这只由“${userPersonaName}”变成的猫咪正跑来你跟前捣蛋、狂叫和捣乱。
+现在这只由“${userPersonaName}”变成的猫咪正跑来你跟前捣蛋、狂叫和捣乱，它和你有着同一个人的灵魂。
 你十分确信这就是它。所以，绝对不要把“${userPersonaName}”和这只猫咪分割开、当成两个独立的个体来互动！
 你可能会感到既好气又好笑，有些无奈和惊奇，但必须根据这一“灵魂变猫”的反差关系做出反应。
 
@@ -1344,10 +1392,13 @@ ${worldbookText}
         chatHistory.push({ role: 'assistant', text: responseText });
 
         await rocheApi.storage.set(chatKey, chatHistory);
-        renderChatSubpage(bodyEl, headerBack, isNpc);
+        
+        // 重新渲染会自动恢复原 Header 标题并清除呼吸灯类
+        render();
       } catch (aiErr) {
         console.error(aiErr);
         rocheApi.ui.toast("两脚兽似乎在发呆，暂时没有回应。");
+        render();
       }
     };
   }
@@ -1362,6 +1413,8 @@ ${worldbookText}
         id: "iamacat-home",
         name: "我是猫",
         icon: "extension",
+        // 温暖的浅粉色猫爪 SVG 图像 Base64 字符串
+        iconImage: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSIjZTI5Mjk1Ij48cGF0aCBkPSJNNTAsNDggQzM2LDQ4IDI4LDYyIDI4LDc2IEMyOCw5MCAzOCw5NCA1MCw5NEM2Miw5NCA3Miw5MCA3Miw3NkM3Miw2MiA2NCw0OCA1MCw0OCBaIi8+PGNpcmNsZSBjeD0iMjIiIGN5PSI0MyIgcj0iMTEiLz48Y2lyY2xlIGN4PSIzOCIgY3k9IjI0IiByPSIxMi41Ii8+PGNpcmNsZSBjeD0iNjIiIGN5PSIyNCIgcj0iMTIuNSIvPjxjaXJjbGUgY3g9Ijc4IiBjeT0iNDMiIHI9IjExIi8+PC9zdmc+",
         async mount(container, roche) {
           containerEl = container;
           rocheApi = roche;
