@@ -409,16 +409,19 @@
         text-align: center;
         padding: 24px 12px;
       }
+      
+      /* 改进：骚扰对话框整体尺寸扩展 */
       .roche-plugin-iamacat .chat-subpage {
         display: flex;
         flex-direction: column;
-        height: 100%;
-        max-height: calc(100vh - 100px);
+        height: calc(100% + 32px); /* 冲破父级 16px 边距，贴合底部边缘 */
+        margin: -16px;
+        position: relative;
       }
       .roche-plugin-iamacat .chat-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 8px 4px;
+        padding: 16px 16px 80px 16px; /* 底部安全留白，防止最后一条消息被悬浮框遮挡 */
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -456,16 +459,33 @@
         color: #92a8a1;
         font-style: italic;
       }
+      
+      /* 改进：极简纯悬浮聊天框设计 */
       .roche-plugin-iamacat .chat-input-bar {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
         display: flex;
         gap: 8px;
-        border-top: 1px solid #e1efe9;
-        padding: 12px;
+        background-color: transparent; /* 去除白色底栏块 */
+        border-top: none; /* 去除硬性的灰色分割线 */
+        padding: 0;
         flex-shrink: 0;
-        background-color: #ffffff;
+        z-index: 10;
       }
-      .roche-plugin-iamacat .chat-input-bar input {
-        flex: 1;
+      .roche-plugin-iamacat .chat-input-bar .form-input {
+        background-color: #ffffff;
+        border: 1px solid #cce3da;
+        border-radius: 20px; /* 优雅的胶囊圆角 */
+        padding: 10px 16px;
+        box-shadow: 0 3px 10px rgba(118, 195, 171, 0.15); /* 独立悬浮阴影 */
+      }
+      .roche-plugin-iamacat .chat-input-bar .btn-primary {
+        width: auto;
+        padding: 10px 20px;
+        border-radius: 20px; /* 药丸圆形发送按钮 */
+        box-shadow: 0 3px 10px rgba(226, 146, 149, 0.3); /* 独立悬浮粉色按钮阴影 */
       }
       
       /* 偶遇遮罩层与卡片 */
@@ -955,6 +975,7 @@
       }
     };
     
+    // 绑定偶遇按钮
     bodyEl.querySelector('#action-npc-btn').onclick = () => {
       triggerNPCOncounter();
     };
@@ -1055,7 +1076,7 @@
     const systemPrompt = `你现在正扮演宿主角色：${char.name}（人设：${char.persona || char.bio || ''}）。
 【剧情核心设定】：
 你熟识的朋友“${userPersonaName}”因为某些魔法或奇遇，【已经变成了一只猫咪】！
-现在这只由“${userPersonaName}”变成的猫咪来到了你的家门口，正眼巴巴地蹲在门槛上冲着你喵呜叫借宿。它的猫形信息如下：
+安排这只由“${userPersonaName}”变成的猫咪来到了你的家门口，正眼巴巴地蹲在门槛上冲着你喵呜叫借宿。它的猫形信息如下：
 - 种族：${state.profile.breed}
 - 花色：${state.profile.color}
 - 特长：${state.profile.specialty}
@@ -1287,7 +1308,7 @@ ${historyContext}
         </div>
         <form class="chat-input-bar" id="chat-message-form">
           <input type="text" id="chat-text-input" class="form-input" placeholder="输入叫声或肢体语言骚扰居民..." required autocomplete="off" />
-          <button type="submit" class="btn-primary" style="width: auto; padding: 8px 16px;">发送</button>
+          <button type="submit" class="btn-primary" style="width: auto; padding: 10px 18px;">发送</button>
         </form>
       </div>
     `;
