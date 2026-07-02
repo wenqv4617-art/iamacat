@@ -410,7 +410,7 @@
         padding: 24px 12px;
       }
       
-      /* 改进：骚扰对话框整体尺寸扩展 */
+      /* 骚扰对话框整体尺寸扩展 */
       .roche-plugin-iamacat .chat-subpage {
         display: flex;
         flex-direction: column;
@@ -460,7 +460,7 @@
         font-style: italic;
       }
       
-      /* 改进：极简纯悬浮聊天框设计 */
+      /* 极简纯悬浮聊天框设计 */
       .roche-plugin-iamacat .chat-input-bar {
         position: absolute;
         bottom: 16px;
@@ -848,13 +848,18 @@
     }
   }
 
+  // 改进：异步加载本插件专属聊天记录的最后一条作为预览，拒绝读取和同步宿主的外部聊天
   async function fetchLastMsg(char) {
     try {
-      const msgs = await rocheApi.memory.getShortTerm({ conversationId: char.conversationId, limit: 1 });
+      const chatKey = `cat_chat_${char.id}`;
+      const chatHistory = await rocheApi.storage.get(chatKey) || [];
       const placeholder = document.getElementById(`last-msg-${char.id}`);
+      
       if (placeholder) {
-        if (msgs && msgs.length > 0) {
-          const text = msgs[0].text || '';
+        if (chatHistory && chatHistory.length > 0) {
+          // 排除掉最初的内置系统辅助提示（即包裹在圆括号中的内容），尽量取用户的实际对话
+          const lastMsgObj = chatHistory[chatHistory.length - 1];
+          let text = lastMsgObj.text || '';
           placeholder.innerText = text.length > 15 ? text.slice(0, 15) + '...' : text;
         } else {
           placeholder.innerText = '还没对它进行过骚扰。';
@@ -862,7 +867,7 @@
       }
     } catch (e) {
       const placeholder = document.getElementById(`last-msg-${char.id}`);
-      if (placeholder) placeholder.innerText = '嗅探记录失败';
+      if (placeholder) placeholder.innerText = '还没对它进行过骚扰。';
     }
   }
 
@@ -975,7 +980,6 @@
       }
     };
     
-    // 绑定偶遇按钮
     bodyEl.querySelector('#action-npc-btn').onclick = () => {
       triggerNPCOncounter();
     };
@@ -1076,7 +1080,7 @@
     const systemPrompt = `你现在正扮演宿主角色：${char.name}（人设：${char.persona || char.bio || ''}）。
 【剧情核心设定】：
 你熟识的朋友“${userPersonaName}”因为某些魔法或奇遇，【已经变成了一只猫咪】！
-安排这只由“${userPersonaName}”变成的猫咪来到了你的家门口，正眼巴巴地蹲在门槛上冲着你喵呜叫借宿。它的猫形信息如下：
+现在这只由“${userPersonaName}”变成的猫咪来到了你的家门口，正眼巴巴地蹲在门槛上冲着你喵呜叫借宿。它的猫形信息如下：
 - 种族：${state.profile.breed}
 - 花色：${state.profile.color}
 - 特长：${state.profile.specialty}
