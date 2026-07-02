@@ -18,7 +18,8 @@
     },
     currentChatChar: null, // 正在骚扰的角色
     npcChat: null,         // 临时路人 NPC 会话
-    feed: []               // 探索信息流
+    feed: [],              // 探索信息流
+    encounter: null        // 偶遇卡片状态
   };
 
   // --- 核心方法：状态管理与数据加载 ---
@@ -187,10 +188,36 @@
         flex-direction: column;
         gap: 12px;
       }
+      .roche-plugin-iamacat .avatar-selector-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+      }
+      .roche-plugin-iamacat .user-avatar-frame {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 1px solid #efefef;
+        background-color: #f1f1f1;
+        flex-shrink: 0;
+      }
+      .roche-plugin-iamacat .user-avatar-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .roche-plugin-iamacat .user-avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        background-color: #dbdbdb;
+      }
       .roche-plugin-iamacat .form-row {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        width: 100%;
       }
       .roche-plugin-iamacat .form-row label {
         font-size: 11px;
@@ -206,6 +233,7 @@
         background-color: #fafafa;
         color: #262626;
         transition: border-color 0.2s;
+        width: 100%;
       }
       .roche-plugin-iamacat .form-input:focus {
         border-color: #262626;
@@ -220,6 +248,7 @@
         font-weight: 500;
         cursor: pointer;
         transition: opacity 0.2s;
+        width: 100%;
       }
       .roche-plugin-iamacat .btn-primary:hover {
         opacity: 0.9;
@@ -372,7 +401,7 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        max-height: calc(100vh - 160px);
+        max-height: calc(100vh - 100px);
       }
       .roche-plugin-iamacat .chat-messages {
         flex: 1;
@@ -418,12 +447,71 @@
         display: flex;
         gap: 8px;
         border-top: 1px solid #efefef;
-        padding: 12px 0 0 0;
+        padding: 12px;
         flex-shrink: 0;
-        background-color: #fafafa;
+        background-color: #ffffff;
       }
       .roche-plugin-iamacat .chat-input-bar input {
         flex: 1;
+      }
+      
+      /* 偶遇路人卡片遮罩层 */
+      .roche-plugin-iamacat .modal-overlay {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 1000;
+      }
+      .roche-plugin-iamacat .encounter-card {
+        background-color: #ffffff;
+        border: 1px solid #efefef;
+        border-radius: 12px;
+        padding: 20px;
+        width: 100%;
+        max-width: 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      .roche-plugin-iamacat .encounter-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #f1f1f1;
+        padding-bottom: 8px;
+      }
+      .roche-plugin-iamacat .encounter-title-text {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .roche-plugin-iamacat .encounter-scenario {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.5;
+        padding: 10px;
+        background-color: #fafafa;
+        border-radius: 6px;
+        border-left: 3px solid #262626;
+      }
+      .roche-plugin-iamacat .encounter-reaction {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #4a4a4a;
+        padding: 10px;
+        background-color: #f6f6f6;
+        border-radius: 6px;
+      }
+      .roche-plugin-iamacat .encounter-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
       }
     `;
     document.head.appendChild(styleEl);
@@ -433,6 +521,9 @@
   function render() {
     if (!containerEl) return;
     
+    // 判断当前是否处于聊天骚扰模式（如果是，完全隐藏底部的 Dock 导航栏）
+    const isChatting = state.currentChatChar !== null || state.npcChat !== null;
+    
     containerEl.innerHTML = `
       <div class="roche-plugin-iamacat">
         <header class="cat-header">
@@ -441,6 +532,7 @@
           <div class="header-right" id="header-action-btn"></div>
         </header>
         <div class="cat-body" id="cat-body-content"></div>
+        ${!isChatting ? `
         <nav class="cat-navbar">
           <button class="nav-item ${state.activeTab === 'explore' ? 'active' : ''}" id="nav-btn-explore">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
@@ -455,30 +547,30 @@
             <span>我的</span>
           </button>
         </nav>
+        ` : ''}
       </div>
     `;
     
-    // 绑定底部导航切换事件
-    containerEl.querySelector('#nav-btn-explore').onclick = () => {
-      state.activeTab = 'explore';
-      state.currentChatChar = null;
-      state.npcChat = null;
-      render();
-    };
-    containerEl.querySelector('#nav-btn-harass').onclick = () => {
-      state.activeTab = 'harass';
-      state.currentChatChar = null;
-      state.npcChat = null;
-      render();
-    };
-    containerEl.querySelector('#nav-btn-profile').onclick = () => {
-      state.activeTab = 'profile';
-      state.currentChatChar = null;
-      state.npcChat = null;
-      render();
-    };
+    // 非聊天状态下才需要给导航栏绑定事件
+    if (!isChatting) {
+      containerEl.querySelector('#nav-btn-explore').onclick = () => {
+        state.activeTab = 'explore';
+        render();
+      };
+      containerEl.querySelector('#nav-btn-harass').onclick = () => {
+        state.activeTab = 'harass';
+        render();
+      };
+      containerEl.querySelector('#nav-btn-profile').onclick = () => {
+        state.activeTab = 'profile';
+        render();
+      };
+    }
     
     renderBody();
+    
+    // 如果路人卡片偶遇处于激活状态，随时在顶层渲染遮罩卡片
+    renderEncounterModal();
   }
 
   // --- 核心方法：子页面路由分发 ---
@@ -490,6 +582,33 @@
     
     headerBack.innerHTML = '';
     headerAction.innerHTML = '';
+    
+    const isChatting = state.currentChatChar !== null || state.npcChat !== null;
+    
+    // 管理 header 左侧返回和退出功能
+    if (isChatting) {
+      // 聊天页展示“返回列表”按钮
+      headerBack.innerHTML = `
+        <button class="icon-btn" id="chat-back-btn" title="返回列表">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+      `;
+      headerBack.querySelector('#chat-back-btn').onclick = () => {
+        state.currentChatChar = null;
+        state.npcChat = null;
+        render();
+      };
+    } else {
+      // 首页展示“退出应用/返回主页面”按钮 (极简 X 图标)
+      headerBack.innerHTML = `
+        <button class="icon-btn" id="close-app-btn" title="返回主界面">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      `;
+      headerBack.querySelector('#close-app-btn').onclick = () => {
+        rocheApi.ui.closeApp();
+      };
+    }
     
     if (state.activeTab === 'profile') {
       headerTitle.innerText = '猫咪资料';
@@ -524,6 +643,10 @@
       `<option value="${p.id}" ${state.profile.activePersonaId === p.id ? 'selected' : ''}>${p.name || p.handle || '未命名人设'}</option>`
     ).join('');
     
+    // 计算当前绑定的头像
+    const activePersona = personas.find(p => p.id === state.profile.activePersonaId) || personas[0];
+    const initialAvatar = activePersona?.avatar || '';
+
     bodyEl.innerHTML = `
       <div class="tab-content profile-tab">
         <div class="section-title">我的状态</div>
@@ -553,11 +676,16 @@
         <div class="section-title" style="margin-top: 12px;">猫咪设定</div>
         <form class="profile-form" id="cat-profile-form">
           <div class="form-row">
-            <label>绑定宿主人设</label>
-            <select id="profile-active-persona" class="form-input">
-              <option value="">请选择绑定人设</option>
-              ${optionsHtml}
-            </select>
+            <label>绑定宿主人设及头像</label>
+            <div class="avatar-selector-row">
+              <div class="user-avatar-frame" id="user-avatar-preview">
+                ${initialAvatar ? `<img src="${initialAvatar}" />` : `<div class="user-avatar-placeholder"></div>`}
+              </div>
+              <select id="profile-active-persona" class="form-input" style="flex: 1;">
+                <option value="">请选择绑定人设</option>
+                ${optionsHtml}
+              </select>
+            </div>
           </div>
           <div class="form-row">
             <label>花色</label>
@@ -580,13 +708,26 @@
       </div>
     `;
     
+    // 头像选择联动逻辑
+    const selector = bodyEl.querySelector('#profile-active-persona');
+    const avatarPreview = bodyEl.querySelector('#user-avatar-preview');
+    selector.onchange = () => {
+      const selectedId = selector.value;
+      const matched = personas.find(p => p.id === selectedId);
+      if (matched && matched.avatar) {
+        avatarPreview.innerHTML = `<img src="${matched.avatar}" />`;
+      } else {
+        avatarPreview.innerHTML = `<div class="user-avatar-placeholder"></div>`;
+      }
+    };
+
     bodyEl.querySelector('#cat-profile-form').onsubmit = (e) => {
       e.preventDefault();
       const color = bodyEl.querySelector('#profile-color').value.trim();
       const breed = bodyEl.querySelector('#profile-breed').value.trim();
       const specialty = bodyEl.querySelector('#profile-specialty').value.trim();
       const charm = parseInt(bodyEl.querySelector('#profile-charm').value, 10) || 0;
-      const personaId = bodyEl.querySelector('#profile-active-persona').value;
+      const personaId = selector.value;
       
       state.profile.color = color || "神秘花色";
       state.profile.breed = breed || "猫咪族";
@@ -651,7 +792,6 @@
     }
   }
 
-  // 异步加载上一条聊天记录的前 15 字
   async function fetchLastMsg(char) {
     try {
       const msgs = await rocheApi.memory.getShortTerm({ conversationId: char.conversationId, limit: 1 });
@@ -722,11 +862,11 @@
             </div>
           </div>
           
-          <!-- 偶遇 -->
+          <!-- 偶遇路人 -->
           <div class="action-card">
             <div class="action-meta">
               <span class="action-name">偶遇幸运路人</span>
-              <span class="action-desc">在街角寻找随机生成人类开启骚扰</span>
+              <span class="action-desc">随机触发路人行为场景，在卡片中采取行动</span>
             </div>
             <button class="btn-action" id="action-npc-btn">去偶遇</button>
           </div>
@@ -779,6 +919,7 @@
       }
     };
     
+    // 绑定偶遇按钮
     bodyEl.querySelector('#action-npc-btn').onclick = () => {
       triggerNPCOncounter();
     };
@@ -866,18 +1007,30 @@
   // --- 核心方法：AI 判定借宿请求 ---
   async function requestSleepAtCharHome(char) {
     rocheApi.ui.toast("正在朝 " + (char.handle || char.name) + " 发出撒娇信号...");
+    
+    let userPersonaName = "原宿主人类";
+    try {
+      const personas = await rocheApi.persona.getUserPersonas() || [];
+      const matched = personas.find(p => p.id === state.profile.activePersonaId);
+      if (matched) {
+        userPersonaName = matched.name || matched.handle || "原宿主人类";
+      }
+    } catch (e) {}
+
     const systemPrompt = `你现在正扮演宿主角色：${char.name}（人设：${char.persona || char.bio || ''}）。
-现在有一只猫咪正在向你借宿。它的信息如下：
+【剧情核心设定】：
+你熟识的朋友“${userPersonaName}”因为某些魔法或奇遇，【已经变成了一只猫咪】！
+现在这只由“${userPersonaName}”变成的猫咪来到了你的家门口，正眼巴巴地蹲在门槛上冲着你喵呜叫借宿。它的猫形信息如下：
 - 种族：${state.profile.breed}
 - 花色：${state.profile.color}
 - 特长：${state.profile.specialty}
 - 魅力等级：${state.profile.charm}/100
 
-猫咪正眼巴巴地蹲在门槛上冲着你喵呜叫。你会允许这只小家伙今晚在你的沙发或阳台上借宿吗？
+你会允许这个变成了猫的“${userPersonaName}”今晚在你的沙发或阳台上借宿吗？
 请完全融入你的人物性格进行决策，并严格以下列 JSON 格式回答。不要包含 Markdown 代码块标记，不要返回其他文字：
 {
   "agreed": true, // 或者 false
-  "reply": "你对猫咪做出的回应一句话"
+  "reply": "你对变成了猫的 ${userPersonaName} 回应的一句话"
 }`;
 
     try {
@@ -913,70 +1066,171 @@
     }
   }
 
-  // --- 核心方法：随机路人 NPC 生成 ---
-  async function triggerNPCOncounter() {
-    rocheApi.ui.toast("正在大街上搜索路人...");
-    const prompt = `请生成一个街头的简短人类路人身份设定，用于和一只调皮的猫咪开启临时聊天。
-请严格返回如下 JSON 结构，不要含有 Markdown 代码标记：
-{
-  "name": "路人身份名 (例如：行色匆匆的上班族)",
-  "bio": "性格及心理状态 (例如：正因为赶地铁而焦虑不安)"
-}`;
-    try {
-      const res = await rocheApi.ai.chat({
-        messages: [{ role: 'user', content: prompt }]
-      });
-      let cleanText = res.text.replace(/```json/g, "").replace(/```/g, "").trim();
-      let npc = { name: "忙碌的外卖员", bio: "正在焦急核对订单地址" };
-      try {
-        npc = JSON.parse(cleanText);
-      } catch (err) {}
-      
-      state.npcChat = {
-        npc: npc,
-        messages: [
-          { role: 'assistant', text: `（在街角偶遇了：${npc.name}。当前状态：${npc.bio}。你可以对它喵呜叫唤或恶作剧。）` }
-        ]
+  // --- 核心方法：卡片式偶遇路人行为渲染 ---
+  function renderEncounterModal() {
+    let wrapper = containerEl.querySelector('#encounter-modal-wrapper');
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.id = 'encounter-modal-wrapper';
+      containerEl.querySelector('.roche-plugin-iamacat').appendChild(wrapper);
+    }
+    
+    if (!state.encounter) {
+      wrapper.innerHTML = '';
+      return;
+    }
+    
+    wrapper.innerHTML = `
+      <div class="modal-overlay">
+        <div class="encounter-card">
+          <div class="encounter-header">
+            <span class="encounter-title-text">路人偶遇</span>
+            <button class="icon-btn" id="close-encounter-btn" title="离开">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          
+          ${state.encounter.loading ? `
+            <div class="loading-placeholder">正在发生一些有趣的事情...</div>
+          ` : `
+            <div class="encounter-scenario">
+              ${state.encounter.scenario}
+            </div>
+            
+            ${state.encounter.reaction ? `
+              <div class="encounter-reaction">
+                ${state.encounter.reaction}
+              </div>
+              <button class="btn-primary" id="leave-encounter-btn">悄然离开</button>
+            ` : `
+              <form class="encounter-form" id="encounter-action-form">
+                <div class="form-row">
+                  <label>你的行动：</label>
+                  <input type="text" id="encounter-action-input" class="form-input" placeholder="写下猫咪要做的事，例如：悄悄蹭他裤腿..." required autocomplete="off" />
+                </div>
+                <button type="submit" class="btn-primary" style="margin-top: 4px;">行动！</button>
+              </form>
+            `}
+          `}
+        </div>
+      </div>
+    `;
+    
+    // 绑定关闭按钮
+    wrapper.querySelector('#close-encounter-btn').onclick = () => {
+      state.encounter = null;
+      renderEncounterModal();
+    };
+    
+    if (state.encounter.reaction) {
+      wrapper.querySelector('#leave-encounter-btn').onclick = () => {
+        state.encounter = null;
+        renderEncounterModal();
+        render();
       };
-      render();
-    } catch (e) {
-      rocheApi.ui.toast("现在街上静悄悄的，没有过路人。");
+    } else if (!state.encounter.loading) {
+      const form = wrapper.querySelector('#encounter-action-form');
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const actionInput = wrapper.querySelector('#encounter-action-input');
+        const actionText = actionInput.value.trim();
+        if (!actionText) return;
+        
+        if (state.profile.energy < 0.5 || state.profile.satiety < 0.5) {
+          rocheApi.ui.toast("精疲力竭了！请先吃点小鱼干或睡一觉。");
+          return;
+        }
+        
+        state.encounter.loading = true;
+        state.encounter.action = actionText;
+        renderEncounterModal();
+        
+        // 扣除资源并更新状态
+        state.profile.energy = Math.max(0, state.profile.energy - 0.5);
+        state.profile.satiety = Math.max(0, state.profile.satiety - 0.5);
+        state.profile.mischief += 1;
+        saveProfile();
+        
+        const reactionPrompt = `你是一只猫。
+当前场景是：[${state.encounter.scenario}]。
+你作为一只可爱的猫咪，对身边的人采取了如下行动：[${actionText}]。
+
+这只猫咪的信息：
+- 花色：${state.profile.color}
+- 特长：${state.profile.specialty}
+
+请生成这个路人接下来的反应。
+规则：
+1. 他的态度可以是偏友好的（觉得被治愈了，或者轻轻拍拍你），也可以是有些困扰或防备的（比如吓了一跳，嘟囔几句并小心避开）。
+2. 【绝对禁止出现任何对猫咪的暴力、伤害、踢踹、或者残虐残忍的行为设定】。
+3. 反应描述必须真实生动符合日常，字数严格限制在 60 字以内。
+4. 千万不要带有任何 emoji 图标。
+请直接输出此人的具体反应，不要带任何 Markdown 或额外格式。`;
+        
+        try {
+          const res = await rocheApi.ai.chat({
+            messages: [{ role: 'user', content: reactionPrompt }]
+          });
+          state.encounter.loading = false;
+          state.encounter.reaction = res.text || "路人有些诧异地看了你一眼，随后快步离开了。";
+          renderEncounterModal();
+        } catch (err) {
+          state.encounter.loading = false;
+          state.encounter.reaction = "发生了一点小意外，路人转身走开了。";
+          renderEncounterModal();
+        }
+      };
     }
   }
 
-  // --- 模块 4：“骚扰与对话” 子页面（多轮对话） ---
-  async function renderChatSubpage(bodyEl, headerBack, isNpc) {
-    headerBack.innerHTML = `
-      <button class="icon-btn" id="chat-back-btn">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      </button>
-    `;
-    headerBack.querySelector('#chat-back-btn').onclick = () => {
-      if (isNpc) {
-        state.npcChat = null;
-      } else {
-        state.currentChatChar = null;
-      }
-      render();
+  // 触发偶遇 AI 场景
+  async function triggerNPCOncounter() {
+    rocheApi.ui.toast("正在小街上环顾四周...");
+    
+    state.encounter = {
+      scenario: "一个行人急匆匆地走过街角。",
+      action: "",
+      reaction: "",
+      loading: true
     };
+    renderEncounterModal();
+    
+    const scenarioPrompt = `请生成一个极其简短的、富有画面感的高清日常生活细节。句式必须是“一个人正在干什么”的主动宾短句。
+例如：‘一个保洁阿姨正在清扫路灯下落下的几片叶子。’ 或 ‘一个穿西装的男士正倚在墙角焦急地查看公文包。’。
+注意：
+1. 绝对不要包含任何 emoji 图标。
+2. 字数控制在 25 字以内。
+3. 请直接返回这句场景描述，不要带任何 Markdown 格式或多余解释。`;
+    
+    try {
+      const res = await rocheApi.ai.chat({
+        messages: [{ role: 'user', content: scenarioPrompt }]
+      });
+      state.encounter.scenario = res.text.trim();
+      state.encounter.loading = false;
+      renderEncounterModal();
+    } catch (err) {
+      state.encounter.scenario = "一个外卖骑手提着一份冒着热气的便当正向电梯跑去。";
+      state.encounter.loading = false;
+      renderEncounterModal();
+    }
+  }
 
+  // --- 模块 4：“骚扰与对话” 页面设计（多轮对话） ---
+  async function renderChatSubpage(bodyEl, headerBack, isNpc) {
     const chatKey = isNpc ? null : `cat_chat_${state.currentChatChar.id}`;
     let chatHistory = [];
     
-    if (isNpc) {
-      chatHistory = state.npcChat.messages;
-    } else {
-      try {
-        chatHistory = await rocheApi.storage.get(chatKey) || [];
-        if (chatHistory.length === 0) {
-          chatHistory = [
-            { role: 'assistant', text: `（你发现 ${state.currentChatChar.handle || state.currentChatChar.name} 独自坐着，发出了呼噜声引起它的注意）` }
-          ];
-          await rocheApi.storage.set(chatKey, chatHistory);
-        }
-      } catch (e) {
-        console.error("加载骚扰记录失败", e);
+    try {
+      chatHistory = await rocheApi.storage.get(chatKey) || [];
+      if (chatHistory.length === 0) {
+        chatHistory = [
+          { role: 'assistant', text: `（你发现 ${state.currentChatChar.handle || state.currentChatChar.name} 独自坐着，发出了呼噜声引起它的注意）` }
+        ];
+        await rocheApi.storage.set(chatKey, chatHistory);
       }
+    } catch (e) {
+      console.error("加载骚扰记录失败", e);
     }
 
     bodyEl.innerHTML = `
@@ -992,7 +1246,7 @@
         </div>
         <form class="chat-input-bar" id="chat-message-form">
           <input type="text" id="chat-text-input" class="form-input" placeholder="输入叫声或肢体语言骚扰居民..." required autocomplete="off" />
-          <button type="submit" class="btn-primary">发送</button>
+          <button type="submit" class="btn-primary" style="width: auto; padding: 8px 16px;">发送</button>
         </form>
       </div>
     `;
@@ -1013,11 +1267,7 @@
       }
 
       chatHistory.push({ role: 'user', text });
-      if (isNpc) {
-        state.npcChat.messages = chatHistory;
-      } else {
-        await rocheApi.storage.set(chatKey, chatHistory);
-      }
+      await rocheApi.storage.set(chatKey, chatHistory);
 
       state.profile.energy = Math.max(0, state.profile.energy - 0.5);
       state.profile.satiety = Math.max(0, state.profile.satiety - 0.5);
@@ -1028,43 +1278,45 @@
       renderChatSubpage(bodyEl, headerBack, isNpc);
 
       try {
-        let systemPrompt = '';
-        if (isNpc) {
-          systemPrompt = `你现在是路人：${state.npcChat.npc.name}（设定特征：${state.npcChat.npc.bio}）。
-现在，有一只猫咪正在街上骚扰你。猫咪信息：
+        let worldbookText = '';
+        try {
+          const entries = await rocheApi.worldbook.getEntries({ scope: 'global' });
+          if (entries && entries.length > 0) {
+            worldbookText = entries.map(e => `${e.keyword || e.key}: ${e.content || e.value}`).join('\n');
+          }
+        } catch (wbErr) {}
+
+        // 获取选定的人设名称，用于深度人设扮演融入
+        let userPersonaName = "原宿主人类";
+        try {
+          const personas = await rocheApi.persona.getUserPersonas() || [];
+          const matched = personas.find(p => p.id === state.profile.activePersonaId);
+          if (matched) {
+            userPersonaName = matched.name || matched.handle || "原宿主人类";
+          }
+        } catch (e) {}
+
+        const systemPrompt = `你现在扮演 Roche 居民：${state.currentChatChar.name}（性格设定：${state.currentChatChar.persona || state.currentChatChar.bio || ''}）。
+【剧情核心设定】：
+你平日里所熟识的朋友 “${userPersonaName}”，由于某种莫名而离奇的魔法或意外，【现在已经彻底变成了一只猫咪】！
+现在这只由“${userPersonaName}”变成的猫咪正跑来你跟前捣蛋、狂叫和捣乱。
+你十分确信这就是它。所以，绝对不要把“${userPersonaName}”和这只猫咪分割开、当成两个独立的个体来互动！
+你可能会感到既好气又好笑，有些无奈和惊奇，但必须根据这一“灵魂变猫”的反差关系做出反应。
+
+这只猫形朋友的特征：
 - 花色：${state.profile.color}
 - 种族：${state.profile.breed}
-- 特长：${state.profile.specialty}
-- 魅力度：${state.profile.charm}/100
-- 淘气值：${state.profile.mischief}
-
-请以此路人的口吻做出合理的、富有生活气的反馈，保持极简对话。
-重要规则：绝对不可以带有任何 emoji 图标，字数严格限制在 50 字以内。`;
-        } else {
-          let worldbookText = '';
-          try {
-            const entries = await rocheApi.worldbook.getEntries({ scope: 'global' });
-            if (entries && entries.length > 0) {
-              worldbookText = entries.map(e => `${e.keyword || e.key}: ${e.content || e.value}`).join('\n');
-            }
-          } catch (wbErr) {}
-
-          systemPrompt = `你现在扮演 Roche 居民：${state.currentChatChar.name}（性格设定：${state.currentChatChar.persona || state.currentChatChar.bio || ''}）。
-现在有一只猫咪正在‘骚扰’你。猫咪详情：
-- 花色：${state.profile.color}
-- 种族：${state.profile.breed}
-- 特长：${state.profile.specialty}
-- 魅力：${state.profile.charm}/100
-- 淘气值：${state.profile.mischief}
+- 猫咪特长：${state.profile.specialty}
+- 魅力等级：${state.profile.charm}/100
+- 淘气等级：${state.profile.mischief}
 
 世界书环境设定背景：
 ${worldbookText}
 
-请完全符合你的性格特征。在被这只猫咪黏人、抓裤腿或讨要零食的叫声骚扰时，你该做出何种自然的互动反应。
+请完全融入你的人物设定，面对【变成了猫咪的 ${userPersonaName}】此时跑来骚扰你的言行，做出符合你个性与两方关系的反应。
 重要规则：
-1. 你的回答必须非常生活化，简短，字数严格控制在 80 字以内。
-2. 千万不可产生任何 emoji 图标，用纯文字和标点符号描述。`;
-        }
+1. 你的回答必须非常简短、生活化，字数绝对控制在 80 字以内。
+2. 绝对不准产生任何 emoji 图标，用纯文字和标点符号描述。`;
 
         const recentHistory = chatHistory.slice(-8);
         const chatPayload = [
@@ -1091,12 +1343,7 @@ ${worldbookText}
         const responseText = replyResult.text || '（只是静静地看着你，没有说话）';
         chatHistory.push({ role: 'assistant', text: responseText });
 
-        if (isNpc) {
-          state.npcChat.messages = chatHistory;
-        } else {
-          await rocheApi.storage.set(chatKey, chatHistory);
-        }
-
+        await rocheApi.storage.set(chatKey, chatHistory);
         renderChatSubpage(bodyEl, headerBack, isNpc);
       } catch (aiErr) {
         console.error(aiErr);
@@ -1105,7 +1352,7 @@ ${worldbookText}
     };
   }
 
-  // --- 4. 注册插件到宿主环境 ---
+  // --- 5. 注册插件到宿主环境 ---
   window.RochePlugin.register({
     id: "iamacat-plugin",
     name: "我是猫",
@@ -1116,7 +1363,6 @@ ${worldbookText}
         name: "我是猫",
         icon: "extension",
         async mount(container, roche) {
-          // 初始化闭包内的全局宿主引用
           containerEl = container;
           rocheApi = roche;
           
@@ -1135,16 +1381,13 @@ ${worldbookText}
           render();
         },
         async unmount(container, roche) {
-          // 清理样式
           const styleEl = document.getElementById('roche-plugin-iamacat-styles');
           if (styleEl) styleEl.remove();
           
-          // 清理 DOM 节点
           if (container) {
             container.replaceChildren();
           }
           
-          // 彻底断开引用释放内存
           containerEl = null;
           rocheApi = null;
         }
