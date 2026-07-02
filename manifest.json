@@ -3,8 +3,8 @@
   "name": "我是猫",
   "version": "1.0.0",
   "description": "化身一只猫咪，对周围的居民进行调皮的骚扰，打探猫咪八卦圈吧。",
-  "author": "猫咪开发助理",
-  "entry": "https://raw.githubusercontent.com/wenqv4617-art/iamecat/main/iamacat-plugin.js",
+  "author": "wenqv4617-art",
+  "entry": "https://raw.githubusercontent.com/wenqv4617-art/iamacat/main/iamacat-plugin.js",
   "hash": "",
   "permissions": [
     "persona:read",
