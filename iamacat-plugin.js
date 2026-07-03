@@ -761,10 +761,12 @@
             <div class="stat-value">${state.profile.charm}/100</div>
             <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${state.profile.charm}%"></div></div>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">淘气度</div>
-            <div class="stat-value">${state.profile.mischief}</div>
-            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${Math.min(100, state.profile.mischief)}%"></div></div>
+          <div class="stat-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div class="stat-label">淘气度</div>
+              <div class="stat-value" style="color: #e29295; font-size: 18px; margin-top: 2px;">${state.profile.mischief}</div>
+            </div>
+            <div style="font-size: 10px; color: #92a8a1; margin-top: 4px; font-weight: 500;">∞ 无上限成长中</div>
           </div>
         </div>
         
@@ -1153,7 +1155,7 @@
           rocheApi.ui.toast("借宿被批准。美美地睡了一觉，体力充满喵！");
         } else {
           state.profile.energy = Math.max(0, state.profile.energy - 3);
-          rocheApi.ui.toast("被冷淡地赶走了，在寒风中消耗了些许体力。");
+          rocheApi.ui.toast("被冷淡地赶走了，在寒风中消耗了些术体力。");
         }
         await saveProfile();
         render();
