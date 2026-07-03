@@ -6,6 +6,7 @@
   // 2. 游戏全局状态
   let state = {
     activeTab: 'explore', // 'explore' | 'harass' | 'profile'
+    activePersonaId: '',  // 宿主当前的活动面具 ID
     profile: {
       activePersonaId: '',
       color: '奶牛猫',
@@ -22,13 +23,45 @@
     encounter: null        // 偶遇卡片状态 { scenario: '', history: [], loading: false }
   };
 
-  // --- 核心方法：状态管理与数据加载 ---
-  async function loadState() {
-    try {
-      const savedProfile = await rocheApi.storage.get("cat_profile");
-      if (savedProfile) {
-        state.profile = { ...state.profile, ...savedProfile };
+  function getDefaultProfile(personaId) {
+    return {
+      activePersonaId: personaId,
+      color: '奶牛猫',
+      breed: '中华田园猫',
+      specialty: '钻纸箱',
+      charm: 80,
+      energy: 100,
+      satiety: 100,
+      mischief: 0
+    };
+  }
+
+  // --- 核心方法：状态管理与数据加载（基于当前面具随动加载） ---
+  async function loadState(personaId) {
+    let targetPersonaId = personaId;
+    if (!targetPersonaId) {
+      try {
+        const activeUser = await rocheApi.persona.getActiveUserPersona();
+        targetPersonaId = activeUser?.id || 'default_persona';
+      } catch (e) {
+        targetPersonaId = 'default_persona';
       }
+    }
+
+    state.activePersonaId = targetPersonaId;
+
+    try {
+      // 随动读取该面具对应的独立设定和状态
+      const savedProfile = await rocheApi.storage.get(`cat_profile_${targetPersonaId}`);
+      if (savedProfile) {
+        state.profile = { ...getDefaultProfile(targetPersonaId), ...savedProfile };
+      } else {
+        state.profile = getDefaultProfile(targetPersonaId);
+      }
+      
+      // 同步绑定人设
+      state.profile.activePersonaId = targetPersonaId;
+
       const savedFeed = await rocheApi.storage.get("cat_feed");
       if (savedFeed) {
         state.feed = savedFeed;
@@ -40,13 +73,14 @@
 
   async function saveProfile() {
     try {
-      await rocheApi.storage.set("cat_profile", state.profile);
+      const personaId = state.activePersonaId || 'default_persona';
+      await rocheApi.storage.set(`cat_profile_${personaId}`, state.profile);
     } catch (e) {
       console.error("保存猫咪存档失败:", e);
     }
   }
 
-  // --- 核心方法：样式管理（重构为浅薄荷绿与柔和粉可爱配色） ---
+  // --- 核心方法：样式管理（浅薄荷绿与柔和粉配色） ---
   function insertStyles() {
     if (document.getElementById('roche-plugin-iamacat-styles')) return;
     const styleEl = document.createElement('style');
@@ -421,7 +455,7 @@
       .roche-plugin-iamacat .chat-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 16px 16px 80px 16px; /* 底部安全留白，防止最后一条消息被悬浮框遮挡 */
+        padding: 16px 16px 80px 16px; /* 底部安全留白 */
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -442,6 +476,11 @@
         border-radius: 14px;
         font-size: 13px;
         line-height: 1.4;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+      }
+      .roche-plugin-iamacat .chat-bubble:hover {
+        transform: scale(1.01);
       }
       .roche-plugin-iamacat .chat-bubble-row.me .chat-bubble {
         background-color: #fbe9eb; /* 猫咪发言用淡粉气泡 */
@@ -468,8 +507,8 @@
         right: 16px;
         display: flex;
         gap: 8px;
-        background-color: transparent; /* 去除白色底栏块 */
-        border-top: none; /* 去除硬性的灰色分割线 */
+        background-color: transparent;
+        border-top: none;
         padding: 0;
         flex-shrink: 0;
         z-index: 10;
@@ -672,10 +711,10 @@
     } else if (state.activeTab === 'harass') {
       if (state.currentChatChar) {
         headerTitle.innerText = `${state.currentChatChar.handle || state.currentChatChar.name}`;
-        renderChatSubpage(bodyEl, headerBack, false);
+        renderChatSubpage(bodyEl, headerBack, headerAction, false);
       } else if (state.npcChat) {
         headerTitle.innerText = `${state.npcChat.npc.name}`;
-        renderChatSubpage(bodyEl, headerBack, true);
+        renderChatSubpage(bodyEl, headerBack, headerAction, true);
       } else {
         headerTitle.innerText = '选择居民';
         renderHarassTab(bodyEl);
@@ -696,11 +735,11 @@
     }
 
     const optionsHtml = personas.map(p => 
-      `<option value="${p.id}" ${state.profile.activePersonaId === p.id ? 'selected' : ''}>${p.name || p.handle || '未命名人设'}</option>`
+      `<option value="${p.id}" ${state.activePersonaId === p.id ? 'selected' : ''}>${p.name || p.handle || '未命名人设'}</option>`
     ).join('');
     
     // 计算当前绑定的头像
-    const activePersona = personas.find(p => p.id === state.profile.activePersonaId) || personas[0];
+    const activePersona = personas.find(p => p.id === state.activePersonaId) || personas[0];
     const initialAvatar = activePersona?.avatar || '';
 
     bodyEl.innerHTML = `
@@ -732,7 +771,7 @@
         <div class="section-title" style="margin-top: 12px;">猫咪设定</div>
         <form class="profile-form" id="cat-profile-form">
           <div class="form-row">
-            <label>绑定宿主人设及头像</label>
+            <label>切换/绑定宿主人设及头像</label>
             <div class="avatar-selector-row">
               <div class="user-avatar-frame" id="user-avatar-preview">
                 ${initialAvatar ? `<img src="${initialAvatar}" />` : `<div class="user-avatar-placeholder"></div>`}
@@ -764,35 +803,34 @@
       </div>
     `;
     
-    // 头像选择联动逻辑
+    // 头像选择联动逻辑（满足随动切换面具特性）
     const selector = bodyEl.querySelector('#profile-active-persona');
     const avatarPreview = bodyEl.querySelector('#user-avatar-preview');
-    selector.onchange = () => {
-      const selectedId = selector.value;
-      const matched = personas.find(p => p.id === selectedId);
-      if (matched && matched.avatar) {
-        avatarPreview.innerHTML = `<img src="${matched.avatar}" />`;
-      } else {
-        avatarPreview.innerHTML = `<div class="user-avatar-placeholder"></div>`;
-      }
+    
+    selector.onchange = async () => {
+      const selectedId = selector.value || 'default_persona';
+      // 随动读取对应的面具资料与猫咪属性
+      await loadState(selectedId);
+      render();
     };
 
-    bodyEl.querySelector('#cat-profile-form').onsubmit = (e) => {
+    bodyEl.querySelector('#cat-profile-form').onsubmit = async (e) => {
       e.preventDefault();
       const color = bodyEl.querySelector('#profile-color').value.trim();
       const breed = bodyEl.querySelector('#profile-breed').value.trim();
       const specialty = bodyEl.querySelector('#profile-specialty').value.trim();
       const charm = parseInt(bodyEl.querySelector('#profile-charm').value, 10) || 0;
-      const personaId = selector.value;
+      const personaId = selector.value || 'default_persona';
       
       state.profile.color = color || "神秘花色";
       state.profile.breed = breed || "猫咪族";
       state.profile.specialty = specialty || "擅长睡觉";
       state.profile.charm = Math.max(0, Math.min(100, charm));
       state.profile.activePersonaId = personaId;
+      state.activePersonaId = personaId;
       
-      saveProfile();
-      rocheApi.ui.toast("猫咪设定修改成功喵。");
+      await saveProfile();
+      rocheApi.ui.toast("猫咪设定修改并存档成功喵。");
       render();
     };
   }
@@ -848,16 +886,16 @@
     }
   }
 
-  // 改进：异步加载本插件专属聊天记录的最后一条作为预览，拒绝读取和同步宿主的外部聊天
+  // 改进：异步加载本面具专属聊天记录的最后一条作为预览
   async function fetchLastMsg(char) {
     try {
-      const chatKey = `cat_chat_${char.id}`;
+      const personaId = state.activePersonaId || 'default_persona';
+      const chatKey = `cat_chat_${personaId}_${char.id}`;
       const chatHistory = await rocheApi.storage.get(chatKey) || [];
       const placeholder = document.getElementById(`last-msg-${char.id}`);
       
       if (placeholder) {
         if (chatHistory && chatHistory.length > 0) {
-          // 排除掉最初的内置系统辅助提示（即包裹在圆括号中的内容），尽量取用户的实际对话
           const lastMsgObj = chatHistory[chatHistory.length - 1];
           let text = lastMsgObj.text || '';
           placeholder.innerText = text.length > 15 ? text.slice(0, 15) + '...' : text;
@@ -1071,7 +1109,7 @@
     let userPersonaName = "原宿主人类";
     try {
       const personas = await rocheApi.persona.getUserPersonas() || [];
-      const matched = personas.find(p => p.id === state.profile.activePersonaId);
+      const matched = personas.find(p => p.id === state.activePersonaId);
       if (matched) {
         userPersonaName = matched.name || matched.handle || "原宿主人类";
       }
@@ -1117,7 +1155,7 @@
           state.profile.energy = Math.max(0, state.profile.energy - 3);
           rocheApi.ui.toast("被冷淡地赶走了，在寒风中消耗了些许体力。");
         }
-        saveProfile();
+        await saveProfile();
         render();
       }
     } catch (e) {
@@ -1214,9 +1252,9 @@
         state.profile.energy = Math.max(0, state.profile.energy - 0.5);
         state.profile.satiety = Math.max(0, state.profile.satiety - 0.5);
         state.profile.mischief += 1;
-        saveProfile();
+        await saveProfile();
         
-        // 编译偶遇上下文（提供前几轮的历史行动，让 AI 能够多轮连续对话回应）
+        // 编译偶遇上下文
         const historyContext = state.encounter.history.map(h => 
           `${h.role === 'user' ? '猫咪(我)行动' : '路人反应'}: ${h.text}`
         ).join('\n');
@@ -1282,29 +1320,58 @@ ${historyContext}
     }
   }
 
-  // --- 模块 4：“骚扰与对话” 页面设计（多轮对话） ---
-  async function renderChatSubpage(bodyEl, headerBack, isNpc) {
-    const chatKey = isNpc ? null : `cat_chat_${state.currentChatChar.id}`;
+  // --- 模块 4：“骚扰与对话” 核心子页面（面具随动、重置、双击编辑/重试） ---
+  async function renderChatSubpage(bodyEl, headerBack, headerAction, isNpc, overrideHistory = null) {
+    const personaId = state.activePersonaId || 'default_persona';
+    const chatKey = isNpc ? null : `cat_chat_${personaId}_${state.currentChatChar.id}`;
     let chatHistory = [];
     
-    try {
-      chatHistory = await rocheApi.storage.get(chatKey) || [];
-      if (chatHistory.length === 0) {
-        chatHistory = [
-          { role: 'assistant', text: `（你发现 ${state.currentChatChar.handle || state.currentChatChar.name} 独自坐着，发出了呼噜声引起它的注意）` }
-        ];
-        await rocheApi.storage.set(chatKey, chatHistory);
+    // 如果没有传入覆盖的历史流，则异步从对应的面具缓存中读取
+    if (overrideHistory) {
+      chatHistory = overrideHistory;
+    } else {
+      try {
+        chatHistory = await rocheApi.storage.get(chatKey) || [];
+        if (chatHistory.length === 0) {
+          chatHistory = [
+            { role: 'assistant', text: `（你发现 ${state.currentChatChar.handle || state.currentChatChar.name} 独自坐着，发出了呼噜声引起它的注意）` }
+          ];
+          await rocheApi.storage.set(chatKey, chatHistory);
+        }
+      } catch (e) {
+        console.error("加载骚扰记录失败", e);
       }
-    } catch (e) {
-      console.error("加载骚扰记录失败", e);
+    }
+
+    // 绑定右上角一键重置按钮 (NPC 临时会话不提供重置存档)
+    if (!isNpc) {
+      headerAction.innerHTML = `
+        <button class="icon-btn" id="chat-reset-btn" title="重置对话">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        </button>
+      `;
+      headerAction.querySelector('#chat-reset-btn').onclick = async () => {
+        const confirmReset = await rocheApi.ui.confirm({
+          title: "一键重置对话",
+          message: "确认要清除当前面具下与此居民的所有骚扰对话记录吗？该操作无法恢复。"
+        });
+        if (confirmReset) {
+          await rocheApi.storage.delete(chatKey);
+          rocheApi.ui.toast("对话已重置。");
+          state.currentChatChar = null;
+          render();
+        }
+      };
+    } else {
+      headerAction.innerHTML = '';
     }
 
     bodyEl.innerHTML = `
       <div class="tab-content chat-subpage">
         <div class="chat-messages" id="chat-messages-container">
-          ${chatHistory.map(msg => `
+          ${chatHistory.map((msg, index) => `
             <div class="chat-bubble-row ${msg.role === 'user' ? 'me' : 'them'}">
-              <div class="chat-bubble">
+              <div class="chat-bubble" data-index="${index}" title="双击消息可以编辑或从此重构">
                 ${msg.text}
               </div>
             </div>
@@ -1319,6 +1386,15 @@ ${historyContext}
 
     const container = bodyEl.querySelector('#chat-messages-container');
     if (container) container.scrollTop = container.scrollHeight;
+
+    // 动态给聊天气泡绑定双击行为
+    const bubbles = bodyEl.querySelectorAll('.chat-bubble');
+    bubbles.forEach(bubble => {
+      const index = parseInt(bubble.getAttribute('data-index'), 10);
+      bubble.ondblclick = () => {
+        showBubbleActionModal(index, chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc);
+      };
+    });
 
     const form = bodyEl.querySelector('#chat-message-form');
     form.onsubmit = async (e) => {
@@ -1338,38 +1414,153 @@ ${historyContext}
       state.profile.energy = Math.max(0, state.profile.energy - 0.5);
       state.profile.satiety = Math.max(0, state.profile.satiety - 0.5);
       state.profile.mischief += 1;
-      saveProfile();
+      await saveProfile();
 
       input.value = '';
-      renderChatSubpage(bodyEl, headerBack, isNpc);
+      
+      // 触发 AI 应答
+      await triggerChatResponse(chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc);
+    };
+  }
 
-      // --- 沉思常驻提示优化 ---
-      const headerTitle = containerEl.querySelector('#header-title-text');
-      if (headerTitle) {
-        headerTitle.innerText = "对方正在沉思...";
-        headerTitle.classList.add('thinking-pulse'); // 开启柔和呼吸灯样式
+  // --- 模块 5：双击处理浮层与核心重构引擎 ---
+  function showBubbleActionModal(index, chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc) {
+    const msg = chatHistory[index];
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '2000';
+    
+    overlay.innerHTML = `
+      <div class="encounter-card" style="max-width: 280px; gap: 16px;">
+        <div class="encounter-header">
+          <span class="encounter-title-text">${msg.role === 'user' ? '猫咪的叫声/动作' : '对方的回应'}</span>
+        </div>
+        <div style="font-size: 11.5px; color: #5a6662; word-break: break-all; background: #f1f8f5; padding: 10px; border-radius: 6px; max-height: 80px; overflow-y: auto;">
+          "${msg.text}"
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+          <button class="btn-primary" id="msg-edit-btn">修改此消息内容</button>
+          <button class="btn-action" id="msg-rewind-btn" style="border-color: #e29295; color: #e29295;">从这里重回并重试</button>
+          <button class="btn-action" id="msg-cancel-btn" style="border-color: #92a8a1; color: #92a8a1;">取消</button>
+        </div>
+      </div>
+    `;
+    
+    bodyEl.appendChild(overlay);
+    
+    overlay.querySelector('#msg-cancel-btn').onclick = () => overlay.remove();
+    
+    // 修改消息分支
+    overlay.querySelector('#msg-edit-btn').onclick = () => {
+      overlay.remove();
+      showMiniEditModal(index, msg.text, chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc);
+    };
+    
+    // 从此重试分支 (撤回从当前直至最后的所有消息，并重新发起 LLM 对话)
+    overlay.querySelector('#msg-rewind-btn').onclick = async () => {
+      overlay.remove();
+      
+      let targetUserMsgIdx = -1;
+      if (msg.role === 'user') {
+        targetUserMsgIdx = index;
+      } else {
+        // 如果双击的是对方的回应，定位到我方上一句发送的信息
+        for (let i = index - 1; i >= 0; i--) {
+          if (chatHistory[i].role === 'user') {
+            targetUserMsgIdx = i;
+            break;
+          }
+        }
+      }
+      
+      if (targetUserMsgIdx === -1) {
+        rocheApi.ui.toast("没有找到更早的我方叫声以支持重新请求。");
+        return;
       }
 
+      // 截断该消息以后的所有历史信息 (实现撤回)
+      const truncatedHistory = chatHistory.slice(0, targetUserMsgIdx + 1);
+      await rocheApi.storage.set(chatKey, truncatedHistory);
+      
+      rocheApi.ui.toast("已成功撤回，正在重回对话...");
+      
+      // 重新开始请求 AI 响应
+      await triggerChatResponse(truncatedHistory, chatKey, bodyEl, headerBack, headerAction, isNpc);
+    };
+  }
+
+  // 极简内嵌输入框浮层
+  function showMiniEditModal(index, text, chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '2000';
+    
+    overlay.innerHTML = `
+      <div class="encounter-card" style="max-width: 280px;">
+        <div class="encounter-header">
+          <span class="encounter-title-text">修改信息</span>
+        </div>
+        <div class="form-row">
+          <textarea id="edit-msg-textarea" class="form-input" style="height: 80px; resize: none; font-family: inherit;">${text}</textarea>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; width: 100%;">
+          <button class="btn-primary" id="edit-save-btn" style="flex: 1;">保存</button>
+          <button class="btn-action" id="edit-cancel-btn" style="flex: 1; border-color: #92a8a1; color: #92a8a1;">取消</button>
+        </div>
+      </div>
+    `;
+    
+    bodyEl.appendChild(overlay);
+    
+    overlay.querySelector('#edit-cancel-btn').onclick = () => overlay.remove();
+    
+    overlay.querySelector('#edit-save-btn').onclick = async () => {
+      const newText = overlay.querySelector('#edit-msg-textarea').value.trim();
+      if (!newText) {
+        rocheApi.ui.toast("内容不能为空。");
+        return;
+      }
+      
+      chatHistory[index].text = newText;
+      if (chatKey) {
+        await rocheApi.storage.set(chatKey, chatHistory);
+      }
+      overlay.remove();
+      rocheApi.ui.toast("修改成功。");
+      renderChatSubpage(bodyEl, headerBack, headerAction, isNpc, chatHistory);
+    };
+  }
+
+  // AI 响应逻辑
+  async function triggerChatResponse(chatHistory, chatKey, bodyEl, headerBack, headerAction, isNpc) {
+    // 渲染临时历史预览
+    renderChatSubpage(bodyEl, headerBack, headerAction, isNpc, chatHistory);
+
+    const headerTitle = containerEl.querySelector('#header-title-text');
+    if (headerTitle) {
+      headerTitle.innerText = "对方正在沉思...";
+      headerTitle.classList.add('thinking-pulse');
+    }
+
+    try {
+      let worldbookText = '';
       try {
-        let worldbookText = '';
-        try {
-          const entries = await rocheApi.worldbook.getEntries({ scope: 'global' });
-          if (entries && entries.length > 0) {
-            worldbookText = entries.map(e => `${e.keyword || e.key}: ${e.content || e.value}`).join('\n');
-          }
-        } catch (wbErr) {}
+        const entries = await rocheApi.worldbook.getEntries({ scope: 'global' });
+        if (entries && entries.length > 0) {
+          worldbookText = entries.map(e => `${e.keyword || e.key}: ${e.content || e.value}`).join('\n');
+        }
+      } catch (wbErr) {}
 
-        // 获取选定的人设名称，用于深度人设扮演融入
-        let userPersonaName = "原宿主人类";
-        try {
-          const personas = await rocheApi.persona.getUserPersonas() || [];
-          const matched = personas.find(p => p.id === state.profile.activePersonaId);
-          if (matched) {
-            userPersonaName = matched.name || matched.handle || "原宿主人类";
-          }
-        } catch (e) {}
+      let userPersonaName = "原宿主人类";
+      try {
+        const personas = await rocheApi.persona.getUserPersonas() || [];
+        const matched = personas.find(p => p.id === state.activePersonaId);
+        if (matched) {
+          userPersonaName = matched.name || matched.handle || "原宿主人类";
+        }
+      } catch (e) {}
 
-        const systemPrompt = `你现在扮演 Roche 居民：${state.currentChatChar.name}（性格设定：${state.currentChatChar.persona || state.currentChatChar.bio || ''}）。
+      const systemPrompt = `你现在扮演 Roche 居民：${state.currentChatChar.name}（性格设定：${state.currentChatChar.persona || state.currentChatChar.bio || ''}）。
 【剧情核心设定】：
 你平日里所熟识的朋友 “${userPersonaName}”，由于某种莫名而离奇的魔法或意外，【现在已经彻底变成了一只猫咪】！
 现在这只由“${userPersonaName}”变成的猫咪正跑来你跟前捣蛋、狂叫和捣乱，它和你有着同一个人的灵魂。
@@ -1391,69 +1582,62 @@ ${worldbookText}
 1. 你的回答必须非常简短、生活化，字数绝对控制在 80 字以内。
 2. 绝对不准产生任何 emoji 图标，用纯文字和标点符号描述。`;
 
-        const recentHistory = chatHistory.slice(-8);
-        const chatPayload = [
-          { role: 'system', content: systemPrompt },
-          ...recentHistory.map(m => ({
-            role: m.role,
-            content: m.text
-          }))
-        ];
+      const recentHistory = chatHistory.slice(-8);
+      const chatPayload = [
+        { role: 'system', content: systemPrompt },
+        ...recentHistory.map(m => ({
+          role: m.role,
+          content: m.text
+        }))
+      ];
 
-        const typingBubble = document.createElement('div');
-        typingBubble.className = 'chat-bubble-row them typing';
-        typingBubble.innerHTML = `<div class="chat-bubble">正在回应喵...</div>`;
-        bodyEl.querySelector('#chat-messages-container').appendChild(typingBubble);
-        typingBubble.scrollIntoView({ behavior: 'smooth' });
+      const messagesContainer = bodyEl.querySelector('#chat-messages-container');
+      const typingBubble = document.createElement('div');
+      typingBubble.className = 'chat-bubble-row them typing';
+      typingBubble.innerHTML = `<div class="chat-bubble">正在回应喵...</div>`;
+      messagesContainer.appendChild(typingBubble);
+      typingBubble.scrollIntoView({ behavior: 'smooth' });
 
-        const replyResult = await rocheApi.ai.chat({
-          messages: chatPayload,
-          temperature: 0.7
-        });
+      const replyResult = await rocheApi.ai.chat({
+        messages: chatPayload,
+        temperature: 0.7
+      });
 
-        typingBubble.remove();
+      typingBubble.remove();
 
-        const responseText = replyResult.text || '（只是静静地看着你，没有说话）';
-        chatHistory.push({ role: 'assistant', text: responseText });
+      const responseText = replyResult.text || '（只是静静地看着你，没有说话）';
+      chatHistory.push({ role: 'assistant', text: responseText });
 
+      if (chatKey) {
         await rocheApi.storage.set(chatKey, chatHistory);
-        
-        // 重新渲染会自动恢复原 Header 标题并清除呼吸灯类
-        render();
-      } catch (aiErr) {
-        console.error(aiErr);
-        rocheApi.ui.toast("两脚兽似乎在发呆，暂时没有回应。");
-        render();
       }
-    };
+      
+      // 触发界面完整重新载入
+      render();
+    } catch (aiErr) {
+      console.error(aiErr);
+      rocheApi.ui.toast("两脚兽似乎在发呆，暂时没有回应。");
+      render();
+    }
   }
 
-  // --- 5. 注册插件到宿主环境 ---
+  // --- 6. 注册插件到宿主环境 ---
   window.RochePlugin.register({
     id: "iamacat-plugin",
     name: "我是猫",
-    version: "1.0.0",
+    version: "1.1.0",
     apps: [
       {
         id: "iamacat-home",
         name: "我是猫",
         icon: "extension",
-        // 温暖的浅粉色猫爪 SVG 图像 Base64 字符串
         iconImage: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSIjZTI5Mjk1Ij48cGF0aCBkPSJNNTAsNDggQzM2LDQ4IDI4LDYyIDI4LDc2IEMyOCw5MCAzOCw5NCA1MCw5NEM2Miw5NCA3Miw5MCA3Miw3NkM3Miw2MiA2NCw0OCA1MCw0OCBaIi8+PGNpcmNsZSBjeD0iMjIiIGN5PSI0MyIgcj0iMTEiLz48Y2lyY2xlIGN4PSIzOCIgY3k9IjI0IiByPSIxMi41Ii8+PGNpcmNsZSBjeD0iNjIiIGN5PSIyNCIgcj0iMTIuNSIvPjxjaXJjbGUgY3g9Ijc4IiBjeT0iNDMiIHI9IjExIi8+PC9zdmc+",
         async mount(container, roche) {
           containerEl = container;
           rocheApi = roche;
           
+          // 加载当前活动面具的状态存档
           await loadState();
-          
-          try {
-            const activeUser = await rocheApi.persona.getActiveUserPersona();
-            if (activeUser && !state.profile.activePersonaId) {
-              state.profile.activePersonaId = activeUser.id;
-            }
-          } catch (e) {
-            console.warn("读取默认人设失败:", e);
-          }
 
           insertStyles();
           render();
